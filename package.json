@@ -8,9 +8,10 @@
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
-    "db:migrate": "pnpm api db:migrate",
-    "db:seed": "pnpm api db:seed",
-    "db:reset": "pnpm api db:reset",
+    "db:migrate": "pnpm --filter @esco-trade/api db:migrate",
+    "db:push": "pnpm --filter @esco-trade/api exec prisma db push",
+    "db:seed": "pnpm --filter @esco-trade/api db:seed",
+    "db:reset": "pnpm --filter @esco-trade/api db:reset",
     "docker:up": "docker compose up --build -d",
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f"
