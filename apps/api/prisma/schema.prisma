@@ -1,0 +1,251 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---- Users & auth (application profile; auth records managed by auth library) ----
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  name          String?
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  watchlists   Watchlist[]
+  layouts      ChartLayout[]
+  preferences  Preference[]
+  auditEvents  AuditEvent[]
+  alerts       Alert[]
+}
+
+// ---- Instruments (provider-independent identity) ----
+model Instrument {
+  id             String   @id @default(uuid())
+  internalTicker String
+  name           String?
+  assetType      String   @default("equity")
+  exchange       String?
+  currency       String   @default("USD")
+  timezone       String   @default("America/New_York")
+  pricePrecision Int      @default(2)
+  providerId     String?
+  provider       String?  // which adapter supplied it (demo / alphavantage)
+  session        String   @default("regular")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@unique([internalTicker, exchange, provider], name: "u_instrument_identity")
+
+  watchlistItems    WatchlistItem[]
+  historicalCandles HistoricalCandle[]
+  latestQuotes      LatestQuote[]
+  layouts           ChartLayout[]
+  providerInstruments ProviderInstrument[]
+  alerts            Alert[]
+}
+
+// provider-specific mapping for an instrument (optional; supports multiple providers later)
+model ProviderInstrument {
+  id            String     @id @default(uuid())
+  instrumentId  String
+  provider      String
+  providerSymbol String
+  createdAt     DateTime   @default(now())
+
+  instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@unique([instrumentId, provider], name: "u_provider_instrument")
+}
+
+// ---- Watchlists ----
+model Watchlist {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, name], name: "u_user_watchlist_name")
+
+  items WatchlistItem[]
+}
+
+model WatchlistItem {
+  id         String   @id @default(uuid())
+  watchlistId String
+  instrumentId String
+  sortOrder  Int      @default(0)
+  columns    Json     @default("{}")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  watchlist  Watchlist  @relation(fields: [watchlistId], references: [id], onDelete: Cascade)
+  instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Restrict)
+
+  @@unique([watchlistId, instrumentId], name: "u_watchlist_item")
+}
+
+// ---- Chart layouts & drawings (persisted by instrument identity + price/time coords) ----
+model ChartLayout {
+  id            String   @id @default(uuid())
+  userId        String
+  name          String?
+  instrumentId  String?
+  timeframe     String?
+  chartType     String   @default("candlestick")
+  scale         String   @default("linear")
+  drawings      Json     @default("[]")
+  preferences   Json     @default("{}")
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user       User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument Instrument?  @relation(fields: [instrumentId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+}
+
+// ---- Preferences ----
+model Preference {
+  id        String   @id @default(uuid())
+  userId    String
+  theme     String   @default("dark")
+  timezone  String   @default("UTC")
+  key       String
+  value     Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, key], name: "u_user_preference_key")
+}
+
+// ---- Audit events (sensitive account actions) ----
+model AuditEvent {
+  id         String   @id @default(uuid())
+  userId     String?
+  action     String
+  metadata   Json     @default("{}")
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+}
+
+// ---- Market data: historical candles (denormalized cache; separate from user records) ----
+model HistoricalCandle {
+  id         String   @id @default(uuid())
+  instrumentId String
+  timeframe  String
+  session    String   @default("regular")
+  open       Decimal
+  high       Decimal
+  low        Decimal
+  close      Decimal
+  volume     Decimal
+  timestamp  DateTime
+  adjusted   Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@index([instrumentId, timeframe, session, timestamp])
+}
+
+// ---- Market data: latest quote cache ----
+model LatestQuote {
+  id          String   @id @default(uuid())
+  instrumentId String
+  price       Decimal
+  change      Decimal?
+  changePercent Decimal?
+  volume      Decimal?
+  prevClose   Decimal?
+  session     String   @default("regular")
+  timestamp   DateTime
+  source      String   // demo / alphavantage
+  status      String   // live / delayed / demo / stale
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  instrument Instrument @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+
+  @@index([instrumentId])
+}
+
+// ---- Alerts (server-side alert evaluation) ----
+model Alert {
+  id               String    @id @default(uuid())
+  userId           String
+  name             String
+  instrumentId     String
+  state            String   @default("enabled") // enabled, paused, triggered, expired
+  conditionType    String   // crosses_above, crosses_below, enters_range
+  indicatorType    String   // price, sma, ema, rsi, macd, bollinger_upper, bollinger_lower, vwap
+  threshold        Decimal
+  maxThreshold     Decimal?
+  period           Int?
+  fastPeriod       Int?
+  slowPeriod       Int?
+  signalPeriod     Int?
+  repeatable       Boolean  @default(false)
+  cooldownSeconds  Int       @default(0)
+  enabled          Boolean  @default(true)
+  lastTriggeredAt DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  instrument  Instrument      @relation(fields: [instrumentId], references: [id], onDelete: Cascade)
+  conditions  AlertCondition[]
+  events      AlertEvent[]
+
+  @@index([userId])
+  @@index([instrumentId])
+}
+
+model AlertCondition {
+  id               String   @id @default(uuid())
+  alertId          String
+  type             String   // crosses_above, crosses_below, enters_range
+  indicatorType    String   // price, sma, ema, rsi, macd, bollinger_upper, bollinger_lower, vwap
+  threshold        Decimal
+  maxThreshold     Decimal?
+  period           Int?
+  fastPeriod       Int?
+  slowPeriod       Int?
+  signalPeriod     Int?
+
+  alert Alert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId])
+}
+
+model AlertEvent {
+  id          String   @id @default(uuid())
+  alertId     String
+  triggeredAt DateTime
+  price       Decimal?
+  status      String   @default("triggered")
+
+  alert Alert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+
+  @@index([alertId, triggeredAt])
+}

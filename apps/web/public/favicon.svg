@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" aria-label="Esco Trade">
+  <rect width="32" height="32" rx="8" fill="#152133"/>
+  <path d="M7 21 L12 13 L17 18 L22 9 L25 12" stroke="#5e6b84" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <circle cx="25" cy="12" r="2.5" fill="#5e6b84"/>
+</svg>

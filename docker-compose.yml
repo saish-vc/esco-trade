@@ -1,0 +1,84 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: esco_trade
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+      target: dev
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/esco_trade?schema=public
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: development
+      # ALPHA_VANTAGE_API_KEY: set in your .env; not required for demo mode
+      AUTH_SECRET: dev-secret-change-in-production
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app/apps/api
+      - api_node_modules:/app/apps/api/node_modules
+      - ./packages:/app/packages
+      - shared_node_modules:/app/packages/shared/node_modules
+      - indicators_node_modules:/app/packages/indicators/node_modules
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      target: dev
+    environment:
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+      API_URL: http://localhost:4000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app/apps/web
+      - web_node_modules:/app/apps/web/node_modules
+      - ./packages:/app/packages
+      - shared_node_modules:/app/packages/shared/node_modules
+      - indicators_node_modules:/app/packages/indicators/node_modules
+
+
+
+volumes:
+  postgres_data:
+  redis_data:
+  api_node_modules:
+  web_node_modules:
+  shared_node_modules:
+  indicators_node_modules:
