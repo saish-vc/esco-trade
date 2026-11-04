@@ -16,9 +16,11 @@ interface SearchResult {
 export function SearchDialog({
   isOpen,
   onClose,
+  onSelect,
 }: {
   isOpen: boolean;
   onClose: () => void;
+  onSelect?: (result: SearchResult) => void;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -83,6 +85,7 @@ export function SearchDialog({
 
   const handleSelect = useCallback(
     async (instrument: SearchResult) => {
+      onSelect?.(instrument);
       onClose();
       setQuery("");
       setResults([]);
@@ -106,7 +109,7 @@ export function SearchDialog({
         } catch {}
       }
     },
-    [activeWatchlistId, watchlists, addItem, onClose]
+    [activeWatchlistId, watchlists, addItem, onClose, onSelect]
   );
 
   const watchlistId = activeWatchlistId;

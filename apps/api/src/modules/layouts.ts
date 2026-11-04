@@ -18,12 +18,12 @@ export const layoutsPlugin: FastifyPluginCallback = async (fastify, opts) => {
       where: { userId: user.id },
       orderBy: { updatedAt: "desc" },
     });
-    return layouts.map((l: { id: string; userId: string; name: string; instrumentId: string; timeframe: string; chartType: string; scale: string; drawings: unknown[]; preferences: Record<string, unknown>; createdAt: Date; updatedAt: Date }) => ({
+    return layouts.map((l: any) => ({
       id: l.id,
       userId: l.userId,
-      name: l.name,
-      instrumentId: l.instrumentId,
-      timeframe: l.timeframe,
+      name: l.name ?? "",
+      instrumentId: l.instrumentId ?? "",
+      timeframe: l.timeframe ?? "1D",
       chartType: l.chartType,
       scale: l.scale,
       drawings: (l.drawings as unknown[]),

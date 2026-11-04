@@ -77,8 +77,8 @@ const demoProvider: MarketDataProvider = {
     const rows = await prisma.instrument.findMany({
       where: {
         OR: [
-          { internalTicker: { contains: q } },
-          { name: { contains: q } },
+          { internalTicker: { contains: q, mode: "insensitive" } },
+          { name: { contains: q, mode: "insensitive" } },
         ],
       },
       orderBy: { internalTicker: "asc" },

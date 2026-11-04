@@ -11,6 +11,8 @@ import { registerWebSocket } from "./modules/websocket";
 import { registerHealth } from "./modules/health";
 import { getRedisClient, closeRedisClient } from "./db/redis";
 import { getPrismaClient, closePrismaClient } from "./db/client";
+import { schemas } from "./schemas";
+import { startAlertWorker } from "./worker/alert-worker";
 import { fileURLToPath } from 'url';
 import path from 'path';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -58,6 +60,10 @@ async function buildServer(): Promise<FastifyInstance> {
     },
     crossOriginEmbedderPolicy: false,
   });
+
+  for (const schema of schemas) {
+    fastify.addSchema(schema);
+  }
 
   // OpenAPI docs (for HTTP contract; not for secret endpoints)
   await fastify.register(swagger, {
@@ -141,7 +147,7 @@ Received ${signal}. Starting graceful shutdown...`);
 }
 
 (async () => {
-  const fastify = await buildServer();
+  const server = await buildServer();
   try {
     // Initialize Redis client
     const redis = getRedisClient();
@@ -157,32 +163,10 @@ Received ${signal}. Starting graceful shutdown...`);
     startAlertWorker();
     console.log("Alert worker started");
 
-    const address = await fastify.listen({ port: parseInt(process.env.API_PORT ?? "4000", 10), host: "0.0.0.0" });
+    const address = await server.listen({ port: parseInt(process.env.API_PORT ?? "4000", 10), host: "0.0.0.0" });
     console.log("API listening at", address);
   } catch (err) {
-    fastify.log.error(err);
+    server.log.error(err);
     process.exit(1);
   }
 })();
-
-try {
-  // Initialize Redis client
-  const redis = getRedisClient();
-  await redis.ping();
-  console.log("Redis connected");
-  
-  // Initialize Prisma client
-  const prisma = getPrismaClient();
-  await prisma.$queryRaw`SELECT 1`;
-  console.log("Prisma connected");
-  
-  // Start alert worker (Phase 2)
-  startAlertWorker();
-  console.log("Alert worker started");
-
-  const address = await fastify.listen({ port: parseInt(process.env.API_PORT ?? "4000", 10), host: "0.0.0.0" });
-  console.log("API listening at", address);
-} catch (err) {
-  fastify.log.error(err);
-  process.exit(1);
-}

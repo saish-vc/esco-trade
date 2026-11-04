@@ -124,7 +124,7 @@ export const watchlistsPlugin: FastifyPluginCallback = async (fastify, opts) => 
       sortOrder: watchlist.sortOrder,
       createdAt: watchlist.createdAt,
       updatedAt: watchlist.updatedAt,
-      items: watchlist.items.map((it: { id: string; watchlistId: string; instrument: unknown; sortOrder: number; columns: Record<string, unknown>; createdAt: Date; updatedAt: Date }) => ({
+      items: watchlist.items.map((it: any) => ({
         id: it.id,
         watchlistId: it.watchlistId,
         instrument: it.instrument as unknown as import("@esco-trade/shared").Instrument,
@@ -219,7 +219,7 @@ export const watchlistsPlugin: FastifyPluginCallback = async (fastify, opts) => 
     const user = (req as any).user as { id: string } | null;
     if (!user) return reply.code(401).send({ error: "Unauthorized" });
     const id = req.params.id;
-    const body = ReorderWatchlistItemsSchema.parse(req.body);
+    const body = ReorderWatchlistItemsSchema.parse({ watchlistId: id, ...((req.body as object) || {}) });
     const watchlist = await prisma.watchlist.findFirst({
       where: { id, userId: user.id },
       include: { items: true },
@@ -254,7 +254,7 @@ export const watchlistsPlugin: FastifyPluginCallback = async (fastify, opts) => 
       sortOrder: watchlist.sortOrder,
       createdAt: watchlist.createdAt,
       updatedAt: watchlist.updatedAt,
-      items: updated.map((it: { id: string; watchlistId: string; instrument: unknown; sortOrder: number; columns: Record<string, unknown>; createdAt: Date; updatedAt: Date }) => ({
+      items: updated.map((it: any) => ({
         id: it.id,
         watchlistId: it.watchlistId,
         instrument: it.instrument as unknown as import("@esco-trade/shared").Instrument,

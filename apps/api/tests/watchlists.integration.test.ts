@@ -26,8 +26,15 @@ describe("watchlists module — ownership & persistence", () => {
   let instrumentIdB: string | null = null;
 
   beforeEach(async () => {
-    fastifyA = await FastifyInstance?.default ? await import("fastify").then((m) => m.default()) : (await import("fastify")).default();
-    fastifyB = await FastifyInstance?.default ? await import("fastify").then((m) => m.default()) : (await import("fastify")).default();
+    const { schemas } = await import("../src/schemas");
+    const fa = (await import("fastify")).default();
+    const fb = (await import("fastify")).default();
+    for (const schema of schemas) {
+      fa.addSchema(schema);
+      fb.addSchema(schema);
+    }
+    fastifyA = fa;
+    fastifyB = fb;
 
     // Both instances point at the same DB via prisma singleton; that's fine for integration.
 
@@ -42,7 +49,19 @@ describe("watchlists module — ownership & persistence", () => {
 
     // Ensure there is at least one instrument to reference (seed can create these)
     const prisma = await import("../src/db/client").then((m) => m.prisma);
-    let inst = await prisma.instrument.findFirst();
+    // Ensure users exist in the DB for foreign key constraints
+    await prisma.user.upsert({
+      where: { id: "user-a-uuid" },
+      update: {},
+      create: { id: "user-a-uuid", email: "user-a@example.com" },
+    });
+    await prisma.user.upsert({
+      where: { id: "user-b-uuid" },
+      update: {},
+      create: { id: "user-b-uuid", email: "user-b@example.com" },
+    });
+
+    let inst = await prisma.instrument.findFirst({ where: { internalTicker: "TESTA" } });
     if (!inst) {
       inst = await prisma.instrument.create({
         data: {
@@ -57,22 +76,28 @@ describe("watchlists module — ownership & persistence", () => {
     }
     instrumentIdA = inst.id;
 
-    const instB = await prisma.instrument.create({
-      data: {
-        internalTicker: "TESTB",
-        name: "Test B",
-        exchange: "TESTEX",
-        provider: "demo",
-        assetType: "equity",
-        currency: "USD",
-      },
-    });
+    let instB = await prisma.instrument.findFirst({ where: { internalTicker: "TESTB" } });
+    if (!instB) {
+      instB = await prisma.instrument.create({
+        data: {
+          internalTicker: "TESTB",
+          name: "Test B",
+          exchange: "TESTEX",
+          provider: "demo",
+          assetType: "equity",
+          currency: "USD",
+        },
+      });
+    }
     instrumentIdB = instB.id;
   });
 
   afterEach(async () => {
     if (fastifyA) await fastifyA.close();
     if (fastifyB) await fastifyB.close();
+    const prisma = await import("../src/db/client").then((m) => m.prisma);
+    await prisma.watchlistItem.deleteMany();
+    await prisma.watchlist.deleteMany();
   });
 
   it("user A can create a watchlist", async () => {
@@ -89,6 +114,15 @@ describe("watchlists module — ownership & persistence", () => {
   });
 
   it("user A can add an item to their own watchlist", async () => {
+    // Ensure user A has a watchlist
+    const createRes = await fastifyA.inject({
+      method: "POST",
+      url: "/api/v1/watchlists",
+      payload: { name: "A's add item list" },
+    });
+    expect(createRes.statusCode).toBe(201);
+    watchlistIdA = JSON.parse(createRes.payload).id;
+
     expect(watchlistIdA).toBeTruthy();
     expect(instrumentIdA).toBeTruthy();
     const res = await fastifyA.inject({
@@ -96,6 +130,7 @@ describe("watchlists module — ownership & persistence", () => {
       url: `/api/v1/watchlists/${watchlistIdA}/items`,
       payload: { watchlistId: watchlistIdA, instrumentId: instrumentIdA! },
     });
+    if (res.statusCode !== 201) console.log("ADD ITEM RES:", res.payload);
     expect(res.statusCode).toBe(201);
     const body = JSON.parse(res.payload);
     expect(body.instrument.internalTicker).toBe("TESTA");
@@ -151,25 +186,42 @@ describe("watchlists module — ownership & persistence", () => {
   });
 
   it("user A cannot reorder items in user B's watchlist", async () => {
-    expect(watchlistIdB).toBeTruthy();
+    // Create a watchlist as user B first
+    const resB = await fastifyB.inject({
+      method: "POST",
+      url: "/api/v1/watchlists",
+      payload: { name: "B's reorder list" },
+    });
+    expect(resB.statusCode).toBe(201);
+    const bListId = JSON.parse(resB.payload).id;
+
     const res = await fastifyA.inject({
       method: "PUT",
-      url: `/api/v1/watchlists/${watchlistIdB}/items/reorder`,
+      url: `/api/v1/watchlists/${bListId}/items/reorder`,
       payload: { itemIds: [] },
     });
+    if (res.statusCode !== 404) console.log("REORDER ERR:", res.payload);
     expect(res.statusCode).toBe(404);
   });
 
   it("delete clears user A's watchlist", async () => {
-    expect(watchlistIdA).toBeTruthy();
+    // Ensure user A has a watchlist to delete
+    const createRes = await fastifyA.inject({
+      method: "POST",
+      url: "/api/v1/watchlists",
+      payload: { name: "A's delete list" },
+    });
+    expect(createRes.statusCode).toBe(201);
+    const toDeleteId = JSON.parse(createRes.payload).id;
+
     const res = await fastifyA.inject({
       method: "DELETE",
-      url: `/api/v1/watchlists/${watchlistIdA}`,
+      url: `/api/v1/watchlists/${toDeleteId}`,
     });
     expect(res.statusCode).toBe(204);
     const getRes = await fastifyA.inject({ method: "GET", url: "/api/v1/watchlists" });
     const listBody = JSON.parse(getRes.payload) as Array<{ id: string }>;
-    expect(listBody.find((w) => w.id === watchlistIdA)).toBeUndefined();
+    expect(listBody.find((w) => w.id === toDeleteId)).toBeUndefined();
   });
 
   it("persistence: created watchlist survives a fresh GET", async () => {

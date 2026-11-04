@@ -164,7 +164,7 @@ async function processAlert(job: Job<AlertJobData, AlertResult>): Promise<AlertR
         const prevCandles = candles.slice(0, -1);
         // @ts-ignore - type narrowing for calculateIndicatorValue
         const prevValue = calculateIndicatorValue(
-          prevCandles.map((c: { close: number; high: number; low: number; volume: number }) => ({ close: Number(c.close), high: Number(c.high), low: Number(c.low), volume: Number(c.volume) })),
+          prevCandles.map((c: any) => ({ close: Number(c.close), high: Number(c.high), low: Number(c.low), volume: Number(c.volume) })),
           condition.indicatorType,
           // @ts-ignore
           { period: condition.period, fastPeriod: condition.fastPeriod, slowPeriod: condition.slowPeriod, signalPeriod: condition.signalPeriod }
@@ -179,7 +179,7 @@ async function processAlert(job: Job<AlertJobData, AlertResult>): Promise<AlertR
         const prevCandles = candles.slice(0, -1);
         // @ts-ignore - type narrowing for calculateIndicatorValue
         const prevValue = calculateIndicatorValue(
-          prevCandles.map((c: { close: number; high: number; low: number; volume: number }) => ({ close: Number(c.close), high: Number(c.high), low: Number(c.low), volume: Number(c.volume) })),
+          prevCandles.map((c: any) => ({ close: Number(c.close), high: Number(c.high), low: Number(c.low), volume: Number(c.volume) })),
           // @ts-ignore
           condition.indicatorType,
           // @ts-ignore

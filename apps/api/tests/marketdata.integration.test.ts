@@ -6,7 +6,12 @@ describe("marketdata module", () => {
   let fastify: FastifyInstance;
 
   beforeEach(async () => {
-    fastify = await FastifyInstance?.default ? await import("fastify").then((m) => m.default()) : (await import("fastify")).default();
+    const f = (await import("fastify")).default();
+    const { schemas } = await import("../src/schemas");
+    for (const schema of schemas) {
+      f.addSchema(schema);
+    }
+    fastify = f;
     await fastify.register(marketdataPlugin, { prefix: "/api/v1" });
     await fastify.ready();
   });
@@ -18,7 +23,7 @@ describe("marketdata module", () => {
   it("returns 404 for unknown instrument id", async () => {
     const res = await fastify.inject({
       method: "GET",
-      url: "/api/v1/instruments/not-a-uuid",
+      url: "/api/v1/instruments/00000000-0000-0000-0000-000000000000",
     });
     expect(res.statusCode).toBe(404);
     const body = JSON.parse(res.payload);
@@ -68,8 +73,8 @@ describe("marketdata module", () => {
     expect(body.status).toBe("demo");
     expect(body.source).toBe("demo");
     if (body.candles.length > 0) {
-      const c = body.candles[0] as { time: number; open: number; high: number; low: number; close: number; volume: number };
-      expect(c.time).toBeTypeOf("number");
+      const c = body.candles[0] as { timestamp: string; open: number; high: number; low: number; close: number; volume: number };
+      expect(c.timestamp).toBeDefined();
       expect(c.open).toBeTypeOf("number");
       expect(c.high).toBeGreaterThanOrEqual(c.low);
     }

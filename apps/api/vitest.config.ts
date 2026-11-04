@@ -5,8 +5,11 @@ export default defineConfig({
     include: ["tests/**/*.test.ts"],
     globals: true,
     environment: "node",
-    // Prisma client needs to be generated before tests that import it.
-    // We assume `prisma generate` has run. In CI, ensure this happens.
+    env: {
+      DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/esco_trade?schema=public",
+      REDIS_URL: "redis://localhost:6379",
+      NODE_ENV: "test",
+    },
     deps: {
       interopDefault: true,
     },

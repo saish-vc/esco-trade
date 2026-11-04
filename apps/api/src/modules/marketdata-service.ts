@@ -149,7 +149,7 @@ export class MarketDataService {
         timeframe,
       } as HistoricalResponse;
     }
-    const candles = rawCandles.map((c: { timestamp: Date; open: number | undefined; high: number | undefined; low: number | undefined; close: number | undefined; volume: number | undefined }) => ({
+    const candles = rawCandles.map((c: any) => ({
       timestamp: c.timestamp.getTime(),
       open: Number(c.open ?? 0),
       high: Number(c.high ?? 0),
